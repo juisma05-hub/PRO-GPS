@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro GPS</title>
+</head>
+<body>
+<h2>Pro GPS - prueba de ruteo</h2>
+<p>Destino (lon, lat):</p>
+<input id="destLon" placeholder="longitud ej -71.05">
+<input id="destLat" placeholder="latitud ej 42.36">
+<button id="btn">Calcular rutas</button>
+<pre id="salida">Esperando...</pre>
+<script>
+const ORS_API_KEY = "";
+const salida = document.getElementById("salida");
+document.getElementById("btn").addEventListener("click", async () => {
+  salida.textContent = "Calculando...";
+  if (!ORS_API_KEY) {
+    salida.textContent = "FALTA API KEY: registrate en openrouteservice.org y pegala en ORS_API_KEY";
+    return;
+  }
+  const destinoLon = parseFloat(document.getElementById("destLon").value);
+  const destinoLat = parseFloat(document.getElementById("destLat").value);
+  if (isNaN(destinoLon) || isNaN(destinoLat)) {
+    salida.textContent = "Destino invalido: escribe longitud y latitud reales.";
+    return;
+  }
+  try {
+    const origen = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve([pos.coords.longitude, pos.coords.latitude]),
+        err => reject(new Error("GPS fallo: " + err.message)),
+        { enableHighAccuracy: true }
+      );
+    });
+    const url = "https://api.openrouteservice.org/v2/directions/driving-car/geojson";
+    const body = {
+      coordinates: [origen, [destinoLon, destinoLat]],
+      alternative_routes: { target_count: 3, share_factor: 0.6, weight_factor: 1.4 }
+    };
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Authorization": ORS_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      salida.textContent = "ORS error " + resp.status + ": " + txt;
+      return;
+    }
+    const data = await resp.json();
+    const rutas = data.features.map((f, i) => {
+      const s = f.properties.summary;
+      const km = (s.distance / 1000).toFixed(1);
+      const min = (s.duration / 60).toFixed(0);
+      return "Ruta " + (i + 1) + ": " + km + " km, " + min + " min";
+    });
+    salida.textContent = "Origen GPS: " + origen.join(", ") + "\n\n" + rutas.join("\n");
+  } catch (e) {
+    salida.textContent = "ERROR: " + e.message;
+  }
+});
+</script>
+</body>
+</html>
